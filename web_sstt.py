@@ -34,13 +34,35 @@ def enviar_mensaje(cs, data):
     """ Esta función envía datos (data) a través del socket cs
         Devuelve el número de bytes enviados.
     """
-    return cs.send(data.encode("utf-8"))
+    # return cs.send(data.encode("utf-8"))
+    #comprobamos el tamaño del mensaje 
+    if len(data) > BUFSIZE:
+        #dividimos el mensaje en trozos de 8192
+        trozos = [data[i:i+BUFSIZE] for i in range(0, len(data), BUFSIZE)]
+
+        #enviamos los trozos
+        for trozo in trozos:
+            cs.send(trozo.encode("utf-8"))
+
 
 def crear_mensaje_error(code, msg):
     """ Esta función construye un mensaje de error HTTP
         Devuelve el mensaje de error
     """
     return ("\nHTTP/1.1 " + str(code) + " " + msg + "\n\n")
+
+def crear_mensaje_ok(content_type, content_length, cookie_counter):
+    """ Esta función construye un mensaje de respuesta HTTP
+        Devuelve el mensaje de respuesta
+    """
+    return ("\n"
+            + "HTTP/1.1 200 OK\n"
+            + "Date: " + datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT") + "\n"
+            + "Server: Python/3.6.3\n"
+            + "Connection: close\n"
+            + "Set-Cookie: cookie_counter=" + str(cookie_counter) + "\n"
+            + "Content-Length: " + str(content_length) + "\n"
+            + "Content-Type: " + content_type + "\n\n")
 
 
 def recibir_mensaje(cs):
@@ -72,6 +94,11 @@ def process_cookies(headers,  cs):
     """
     pass
 
+def is_method_http(method):
+    """ Esta función comprueba si el método está incluido
+        en la lista de métodos admitidos por HTTP.
+    """
+    return method in ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"]
 
 def process_web_request(cs, webroot):
     """ Procesamiento principal de los mensajes recibidos.
@@ -129,7 +156,9 @@ def process_web_request(cs, webroot):
 
         #Si hay datos en rsublist y timeout no excedido
         data = recibir_mensaje(cs)
-        error = False
+        if not data:
+            print("no hay datos") #TODO borrar
+            return
 
         #analizamos la linea de solicitud
         lines = data.split('\r\n')
@@ -145,17 +174,18 @@ def process_web_request(cs, webroot):
             i=i+1
         print("headers=",headers) #TODO borrar
 
+        #comprobamos que la linea de solicitud esta bien formateada
         req = lines[0].split(' ') # req = [method, url, vesion]
-        if len(req) != 3:
+        if len(req) != 3: #bad request
             error = True
             continue
         
-        if req[2] != "HTTP/1.1": #version
-            #TODO como actuamos??
+        if req[2] != "HTTP/1.1": #comprobar version
             enviar_mensaje(cs, crear_mensaje_error(505, "Version Not Supported")) 
             continue
         
-        if req[0] != "GET": #method
+        
+        if not is_method_http(req[0]): #comprobar si es un metodo valido
             enviar_mensaje(cs, crear_mensaje_error(405, "Method Not Allowed"))
             continue
 
@@ -164,7 +194,9 @@ def process_web_request(cs, webroot):
 
         #comprobamos si el recurso solicitado es /
         if url == "/":
-            url = "/index.html"
+            url = "index.html"
+        elif url[0] == "/": #eliminamos la barra inicial
+            url = url.split("/")[1]
         
         #construimos la ruta absoluta del recurso
         path = webroot + url
@@ -176,11 +208,34 @@ def process_web_request(cs, webroot):
             continue
 
         #analizamos las cabeceras
-        process_cookies(headers, cs)
+        process_cookies(headers, cs) #TODO
 
+        #obtener el tamaño del recurso en bytes
+        size = os.path.getsize(path)
+
+        #extraer la extension para obtener el tipo de archivo
+        extension = url.split('.')[1]
+
+        #preparamos la respuesta con codigo 200
+        response = crear_mensaje_ok(extension, size, 0).encode('utf-8') #TODO cookie_counter
+
+        #leer y enviar el contenido del fichero pedido
+        # 1. Abrir el fichero en modo lectura y binario
+        with open(path, 'rb') as f:
+            # 2. Leer el fichero en bloques de BUFSIZE bytes
+            while True:
+                trozo = f.read(BUFSIZE)
+
+                # 3. Añadir a la respuesta el trozo leído
+                response += trozo
+                
+                if not trozo:
+                    break  # No hay más información para leer
         
+        #enviamos la respuesta
+        enviar_mensaje(cs, response)
 
-        print("Todo correcto")
+        print("Todo correcto")  
 
 
 
@@ -241,6 +296,7 @@ def main():
         while True:
             #aceptamos la conexión
             (client_socket, address) = tcp_socket.accept()
+
             #creamos un proceso hijo
             pid = os.fork()
             if pid == 0:
