@@ -1,4 +1,0 @@
-GET /index.html HTTP/1.1
-Host: myserver.com
-User-Agent: Alfred
-Accept-Language: en-uk

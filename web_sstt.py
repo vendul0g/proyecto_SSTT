@@ -34,7 +34,6 @@ def enviar_mensaje(cs, data):
     """ Esta función envía datos (data) a través del socket cs
         Devuelve el número de bytes enviados.
     """
-    # return cs.send(data.encode("utf-8"))
     #comprobamos el tamaño del mensaje 
     if len(data) > BUFSIZE:
         #dividimos el mensaje en trozos de 8192
@@ -42,14 +41,16 @@ def enviar_mensaje(cs, data):
 
         #enviamos los trozos
         for trozo in trozos:
-            cs.send(trozo.encode("utf-8"))
+            cs.send(trozo)
+    else:
+        cs.send(data)
 
 
 def crear_mensaje_error(code, msg):
     """ Esta función construye un mensaje de error HTTP
         Devuelve el mensaje de error
     """
-    return ("\nHTTP/1.1 " + str(code) + " " + msg + "\n\n")
+    return ("\nHTTP/1.1 " + str(code) + " " + msg + "\n\n").encode("utf-8")
 
 def crear_mensaje_ok(content_type, content_length, cookie_counter):
     """ Esta función construye un mensaje de respuesta HTTP
@@ -62,7 +63,7 @@ def crear_mensaje_ok(content_type, content_length, cookie_counter):
             + "Connection: close\n"
             + "Set-Cookie: cookie_counter=" + str(cookie_counter) + "\n"
             + "Content-Length: " + str(content_length) + "\n"
-            + "Content-Type: " + content_type + "\n\n")
+            + "Content-Type: " + content_type + "\n\n").encode("utf-8")
 
 
 def recibir_mensaje(cs):
@@ -137,8 +138,10 @@ def process_web_request(cs, webroot):
     """
     
     error = False
+    data = ""
     #bucle para esperar hasta que lleguen datos en la red 
     while True:
+        #print("esperando datos")
         if error: #mandamos mensaje si hubo un error
             print("error") #TODO borrar
             error = False
@@ -149,19 +152,23 @@ def process_web_request(cs, webroot):
 
         #comprobamos timeout excedido
         if not rsublist:
-            print("timeout excedido")
+            print("cierro: timeout excedido")
             #TODO si hay un error, enviar informe de error
             return
-        rsublist = [] #limpiamos la lista
 
         #Si hay datos en rsublist y timeout no excedido
-        data = recibir_mensaje(cs)
-        if not data:
-            print("no hay datos") #TODO borrar
-            return
+        if cs in rsublist:
+            data += recibir_mensaje(cs)
+            if not data.endswith("\r\n\r\n"):
+                continue
+        else:
+            error=True
+            continue
+        rsublist = [] #limpiamos la lista
 
         #analizamos la linea de solicitud
         lines = data.split('\r\n')
+        data = "" #limpiamos la variable
         print("lines=",lines) #TODO borrar
         if len(lines) < 2:
             error = True
@@ -179,6 +186,7 @@ def process_web_request(cs, webroot):
         if len(req) != 3: #bad request
             error = True
             continue
+        print("req=",req) #TODO borrar
         
         if req[2] != "HTTP/1.1": #comprobar version
             enviar_mensaje(cs, crear_mensaje_error(505, "Version Not Supported")) 
@@ -186,6 +194,7 @@ def process_web_request(cs, webroot):
         
         
         if not is_method_http(req[0]): #comprobar si es un metodo valido
+            print("metodo no valido") #TODO borrar
             enviar_mensaje(cs, crear_mensaje_error(405, "Method Not Allowed"))
             continue
 
@@ -217,7 +226,7 @@ def process_web_request(cs, webroot):
         extension = url.split('.')[1]
 
         #preparamos la respuesta con codigo 200
-        response = crear_mensaje_ok(extension, size, 0).encode('utf-8') #TODO cookie_counter
+        response = crear_mensaje_ok(extension, size, 0)#TODO cookie_counter
 
         #leer y enviar el contenido del fichero pedido
         # 1. Abrir el fichero en modo lectura y binario
@@ -288,7 +297,7 @@ def main():
         if tcp_socket.bind((args.host, args.port)) == -1:
             print("Error al vincular el socket con la IP y el puerto")
             sys.exit(-1)
-        
+
         #escuchamos conexiones entrantes
         tcp_socket.listen(1) #recibe la conexión del cliente
 
@@ -297,9 +306,12 @@ def main():
             #aceptamos la conexión
             (client_socket, address) = tcp_socket.accept()
 
+            print("Nueva conexion: ", address)
+
             #creamos un proceso hijo
             pid = os.fork()
             if pid == 0:
+
                 #si es el proceso hijo se cierra el socket del padre 
                 tcp_socket.close()
 
