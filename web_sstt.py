@@ -60,7 +60,8 @@ def crear_mensaje_ok(content_type, content_length, cookie_counter):
             + "HTTP/1.1 200 OK\n"
             + "Date: " + datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT") + "\n"
             + "Server: Python/3.6.3\n"
-            + "Connection: close\n"
+            + "Connection: keep-alive\n"
+            + "Keep-Alive: timeout=" + str(TIMEOUT_CONNECTION) + "\n"
             + "Set-Cookie: cookie_counter=" + str(cookie_counter) + "\n"
             + "Content-Length: " + str(content_length) + "\n"
             + "Content-Type: " + content_type + "\n\n").encode("utf-8")
@@ -299,7 +300,7 @@ def main():
             sys.exit(-1)
 
         #escuchamos conexiones entrantes
-        tcp_socket.listen(1) #recibe la conexión del cliente
+        tcp_socket.listen(5) #recibe la conexión del cliente
 
         #bucle infinito para mantener el servidor activo indefinidamente
         while True:
