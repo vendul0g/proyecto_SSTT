@@ -15,7 +15,8 @@ fi
 git add -A
 git commit -m "$1"
 git push -u origin main
-vendul0g
+expect "usuario: "
+send "vendul0g"
 #usuario github:	vendul0g
 #token github: 		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
 
