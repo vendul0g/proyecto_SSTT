@@ -1,0 +1,4 @@
+POST /accion_form.html HTTP/1.1
+Host: myserver
+
+correo=prueba_correo@um.es

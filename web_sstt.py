@@ -16,8 +16,17 @@ import logging      # Para imprimir logs
 
 
 BUFSIZE = 8192 # Tamaño máximo del buffer que se puede utilizar
+#XXYY = 3776
 TIMEOUT_CONNECTION = 20 # Timout para la conexión persistente
-MAX_ACCESOS = 10
+MAX_ACCESOS = 10# Número máximo de accesos a la página TODO cookie_counter
+HTTP_REGEX = re.compile(r'[^ ]{3,} [^ ]+ HTTP/[0-9].*\r\n(.+:.+\r\n)*\r\n(.*\n?)*')
+ALVARO_EMAIL = "a.navarromartinez1@um.es"
+GERMAN_EMAIL = "german.sanchez2@um.es"
+OK_FILE = "ok_file.html"
+FAIL_FILE = "failed_file.html"
+ERROR_FILE = {
+    403: "./server_webroot/403.html",
+}
 
 # Extensiones admitidas (extension, name in HTTP)
 filetypes = {"gif":"image/gif", "jpg":"image/jpg", "jpeg":"image/jpeg", "png":"image/png", "htm":"text/htm", 
@@ -50,10 +59,24 @@ def crear_mensaje_error(code, msg):
     """ Esta función construye un mensaje de error HTTP
         Devuelve el mensaje de error
     """
-    return ("\nHTTP/1.1 " + str(code) + " " + msg + "\n\n").encode("utf-8")
+    response = ("\nHTTP/1.1 " + str(code) + " " + msg + "\n\n")
+    response += ("<!DOCTYPE html>"
+        + "<html>\n"
+        +   "\t<head>\n"
+        +       "\t\t<title>Error "+str(code)+"</title>\n"
+        +   "\t</head>\n"
+        +   "\t<body>\n"
+        +       "\t\t<h1>"+str(code)+". "+msg+"</h1>\n"
+        +   "\t</body>\n"
+        + "</html>\n\n")
+    
+    return response.encode("utf-8")
+    
+
+    return head
 
 def crear_mensaje_ok(content_type, content_length, cookie_counter):
-    """ Esta función construye un mensaje de respuesta HTTP
+    """ Esta función construye un mensaje de respuesta HTTP 200 OK
         Devuelve el mensaje de respuesta
     """
     return ("\n"
@@ -62,10 +85,10 @@ def crear_mensaje_ok(content_type, content_length, cookie_counter):
             + "Server: Python/3.6.3\n"
             + "Connection: keep-alive\n"
             + "Keep-Alive: timeout=" + str(TIMEOUT_CONNECTION) + "\n"
-            + "Set-Cookie: cookie_counter=" + str(cookie_counter) + "\n"
+            + "Set-Cookie: cookie_counter_3776=" + str(cookie_counter) + "\n"
+            + "Cache-Control: max-age=120\n"
             + "Content-Length: " + str(content_length) + "\n"
             + "Content-Type: " + content_type + "\n\n").encode("utf-8")
-
 
 def recibir_mensaje(cs):
     """ Esta función recibe datos a través del socket cs
@@ -86,7 +109,7 @@ def cerrar_conexion(cs):
     cs.close()
 
 
-def process_cookies(headers,  cs):
+def process_cookies(headers, url):
     """ Esta función procesa la cookie cookie_counter
         1. Se analizan las cabeceras en headers para buscar la cabecera Cookie
         2. Una vez encontrada una cabecera Cookie se comprueba si el valor es cookie_counter
@@ -94,13 +117,122 @@ def process_cookies(headers,  cs):
         4. Si se encuentra y tiene el valor MAX_ACCESSOS se devuelve MAX_ACCESOS
         5. Si se encuentra y tiene un valor 1 <= x < MAX_ACCESOS se incrementa en 1 y se devuelve el valor
     """
-    pass
+    cookie_counter = 0
+    #Recorremos las cabeceras y analizamos para ver si se trata de cookie counter
+    for head in headers:
+        #imprimimos la cabecera
+        print(head)
+
+        aux = head.split(":")
+        #Analizamos si se trata de cookie counter
+        if aux[0] == "Cookie" and aux[1].split("=")[0] == " cookie_counter_3776":
+            cookie_counter = int(head.split("=")[1])
+
+            #comprobamos si se pide el index para aumentar el contador
+            if url != "/index.html":
+                return cookie_counter
+
+            #comprobamos si el valor es MAX_ACCESOS
+            if cookie_counter == MAX_ACCESOS:
+                return MAX_ACCESOS
+            return cookie_counter+1
+
+    return cookie_counter+1
+
+
+    
 
 def is_method_http(method):
     """ Esta función comprueba si el método está incluido
         en la lista de métodos admitidos por HTTP.
     """
     return method in ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"]
+
+def process_get_request(cs, _url, webroot, headers):
+    """ Esta función procesa una petición GET
+        1. Se comprueba si el fichero solicitado existe
+        2. Si no existe se envía un mensaje de error 404
+        3. Si existe se envía el fichero solicitado
+    """
+    #leemos la url y eliminamos parametros
+    url = _url.split('?')[0]
+
+    #comprobamos si el recurso solicitado es /
+    if url == "/":
+        url = "index.html"
+    elif url[0] == "/" and webroot.endswith("/"): #eliminamos la barra inicial
+        url = url.split("/")[1]
+
+    #construimos la ruta absoluta del recurso
+    path = webroot + url
+
+    #procesamos las cookies
+    cookie_counter = process_cookies(headers, url)
+    if cookie_counter == MAX_ACCESOS:
+        enviar_mensaje(cs, crear_mensaje_error(403, "Forbidden"))
+        return -1
+
+    #compobamos que el recurso existe
+    if not os.path.isfile(path):
+        enviar_mensaje(cs, crear_mensaje_error(404, "Not Found"))
+        return -1
+
+    #obtener el tamaño del recurso en bytes
+    size = os.path.getsize(path)
+
+    #extraer la extension para obtener el tipo de archivo
+    extension = url.split('.')[1]
+
+    #preparamos la respuesta con codigo 200
+    response = crear_mensaje_ok(extension, size, cookie_counter)
+
+    #leer y enviar el contenido del fichero pedido
+    # 1. Abrir el fichero en modo lectura y binario
+    with open(path, 'rb') as f:
+        # 2. Leer el fichero en bloques de BUFSIZE bytes
+        while True:
+            trozo = f.read(BUFSIZE)
+
+            # 3. Añadir a la respuesta el trozo leído
+            response += trozo
+            
+            if not trozo:
+                break  # No hay más información para leer
+
+    #enviamos la respuesta
+    enviar_mensaje(cs, response)
+
+def process_post_request(cs, lines, webroot, headers):
+    ''' Esta función procesa una petición POST
+        1. Comprobamos el email introducido
+        2. Si el email es correcto se envía el fichero ok.html
+    '''
+    #obtenemos el email
+    email = lines[0].split('=')[1]
+
+    #comprobamos si el email contiene el caracter %40 que es el @
+    if "%40" in email:
+        email = email.replace('%40', '@')
+    
+    #comprobamos si el email introducido es correcto y actuamos en consecuencia
+    if email == ALVARO_EMAIL or email == GERMAN_EMAIL:
+        file = webroot + OK_FILE
+    else: 
+        file = webroot + FAIL_FILE
+
+    #procesamos las cookies
+    cookie_counter = process_cookies(headers, "")
+
+    #obtenemos tamaño del fichero
+    size = os.path.getsize(file)
+    response = crear_mensaje_ok("html", size, cookie_counter)#TODO Cambiar cookie_counter
+
+    #Leemos el fichero (que no tiene más de 8 KB)
+    with open(file, 'rb') as f:
+        response += f.read(BUFSIZE)
+
+    #enviamos el mensaje
+    enviar_mensaje(cs, response)
 
 def process_web_request(cs, webroot):
     """ Procesamiento principal de los mensajes recibidos.
@@ -121,7 +253,7 @@ def process_web_request(cs, webroot):
                     * Comprobar si el recurso solicitado es /, En ese caso el recurso es index.html
                     * Construir la ruta absoluta del recurso (webroot + recurso solicitado)
                     * Comprobar que el recurso (fichero) existe, si no devolver Error 404 "Not found"
-    --                * Analizar las cabeceras. Imprimir cada cabecera y su valor. Si la cabecera es Cookie comprobar
+                    * Analizar las cabeceras. Imprimir cada cabecera y su valor. Si la cabecera es Cookie comprobar
                       el valor de cookie_counter para ver si ha llegado a MAX_ACCESOS.
                       Si se ha llegado a MAX_ACCESOS devolver un Error "403 Forbidden"
                     * Obtener el tamaño del recurso en bytes.
@@ -138,17 +270,10 @@ def process_web_request(cs, webroot):
                 * NOTA: Si hay algún error, enviar una respuesta de error con una pequeña página HTML que informe del error.
     """
     
-    error = False
     data = ""
     #bucle para esperar hasta que lleguen datos en la red 
     while True:
-        #print("esperando datos")
-        if error: #mandamos mensaje si hubo un error
-            print("error") #TODO borrar
-            error = False
-            enviar_mensaje(cs, crear_mensaje_error(400, "Bad Request"))
-        
-        #Esperamos respuesta del cliente
+        #Esperamos solicitud del cliente
         rsublist, wsublist, xsublist = select.select([cs], [], [], TIMEOUT_CONNECTION)
 
         #comprobamos timeout excedido
@@ -160,92 +285,53 @@ def process_web_request(cs, webroot):
         #Si hay datos en rsublist y timeout no excedido
         if cs in rsublist:
             data += recibir_mensaje(cs)
-            if not data.endswith("\r\n\r\n"):
+            # print("--",data,"--") #TODO borrar
+            if not data.endswith("\r\n\r\n") and not data.startswith("POST"):
                 continue
         else:
-            error=True
+            enviar_mensaje(cs, ("error detectado-167").encode('utf-8'))
+            print("error-167")
             continue
         rsublist = [] #limpiamos la lista
+        aux = data
+        data = "" #limpiamos la variable 
 
         #analizamos la linea de solicitud
-        lines = data.split('\r\n')
-        data = "" #limpiamos la variable
-        print("lines=",lines) #TODO borrar
-        if len(lines) < 2:
-            error = True
+        if not re.fullmatch(HTTP_REGEX, aux):
+            enviar_mensaje(cs, crear_mensaje_error(400, "Bad Request"))
             continue
+        
+        lines = aux.split('\r\n')
+        print("\n")
 
         headers = []#obtenemos la lista de cabeceras
         i=1
         while lines[i]:
             headers.append(lines[i])
             i=i+1
-        print("headers=",headers) #TODO borrar
 
-        #comprobamos que la linea de solicitud esta bien formateada
+        #obtenemos la linea de solicitud dividida
         req = lines[0].split(' ') # req = [method, url, vesion]
-        if len(req) != 3: #bad request
-            error = True
-            continue
         print("req=",req) #TODO borrar
         
         if req[2] != "HTTP/1.1": #comprobar version
             enviar_mensaje(cs, crear_mensaje_error(505, "Version Not Supported")) 
             continue
         
-        
         if not is_method_http(req[0]): #comprobar si es un metodo valido
             print("metodo no valido") #TODO borrar
             enviar_mensaje(cs, crear_mensaje_error(405, "Method Not Allowed"))
             continue
 
-        #leemos la url y eliminamos parametros
-        url = req[1].split('?')[0]
+        if req[0] == "GET":
+            if process_get_request(cs, req[1], webroot, headers) == -1:
+                continue
 
-        #comprobamos si el recurso solicitado es /
-        if url == "/":
-            url = "index.html"
-        elif url[0] == "/": #eliminamos la barra inicial
-            url = url.split("/")[1]
-        
-        #construimos la ruta absoluta del recurso
-        path = webroot + url
-        print(path) #TODO borrar
+        if req[0] == "POST":
+            if process_post_request(cs, lines[i+1:len(lines)], webroot, headers) == -1:
+                continue
 
-        #compobamos que el recurso existe
-        if not os.path.isfile(path):
-            enviar_mensaje(cs, crear_mensaje_error(404, "Not Found"))
-            continue
-
-        #analizamos las cabeceras
-        process_cookies(headers, cs) #TODO
-
-        #obtener el tamaño del recurso en bytes
-        size = os.path.getsize(path)
-
-        #extraer la extension para obtener el tipo de archivo
-        extension = url.split('.')[1]
-
-        #preparamos la respuesta con codigo 200
-        response = crear_mensaje_ok(extension, size, 0)#TODO cookie_counter
-
-        #leer y enviar el contenido del fichero pedido
-        # 1. Abrir el fichero en modo lectura y binario
-        with open(path, 'rb') as f:
-            # 2. Leer el fichero en bloques de BUFSIZE bytes
-            while True:
-                trozo = f.read(BUFSIZE)
-
-                # 3. Añadir a la respuesta el trozo leído
-                response += trozo
-                
-                if not trozo:
-                    break  # No hay más información para leer
-        
-        #enviamos la respuesta
-        enviar_mensaje(cs, response)
-
-        print("Todo correcto")  
+        print("-----------------------------------------------------------------")  
 
 
 
@@ -334,6 +420,3 @@ def main():
 
 if __name__== "__main__":
     main()
-
-
-#https://realpython.com/python-sockets/#tcp-sockets

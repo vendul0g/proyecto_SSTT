@@ -4,9 +4,10 @@
 import sys 
 
 def main():
-    txt = "I could eat bananas all day"
-    x = txt.partition("bananas")
-    print(x) 
+    txt = "a.navarromartinez1@um.es"
+    x = txt.encode('utf-8')
+    print(x)
+    print(x.decode('utf-8')) 
 
 
 if __name__ == "__main__":
