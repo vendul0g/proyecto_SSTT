@@ -6,11 +6,7 @@ then
 	exit
 else
   
-	if [[ $1 == "-x" ]]
-	then
-		let x=1 
-	fi
-	if test $# -gt 2 
+	if test $# -gt 1 
 		then
 			echo "demasiados argumentos"
 			exit
