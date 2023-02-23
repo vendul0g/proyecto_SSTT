@@ -59,17 +59,18 @@ def crear_mensaje_error(code, msg):
     """ Esta función construye un mensaje de error HTTP
         Devuelve el mensaje de error
     """
-    response = ("HTTP/1.1 " + str(code) + " " + msg + "\n"
-        + "\n")
+    response = ("HTTP/1.1 " + str(code) + " " + msg + "\r\n"
+        + "Content-Type: text/html; charset=UTF-8\r\n"
+        + "\r\n")
     response += ("<!DOCTYPE html>"
-        + "<html>\n"
-        +   "\t<head>\n"
-        +       "\t\t<title>Error "+str(code)+"</title>\n"
-        +   "\t</head>\n"
-        +   "\t<body>\n"
-        +       "\t\t<h1>"+str(code)+". "+msg+"</h1>\n"
-        +   "\t</body>\n"
-        + "</html>\n\n")
+        + "<html>\r\n"
+        +   "\t<head>\r\n"
+        +       "\t\t<title>Error "+str(code)+"</title>\r\n"
+        +   "\t</head>\r\n"
+        +   "\t<body>\r\n"
+        +       "\t\t<h1>"+str(code)+". "+msg+"</h1>\r\n"
+        +   "\t</body>\r\n"
+        + "</html>\r\n")
     
     return response.encode("utf-8")
 
@@ -77,7 +78,7 @@ def crear_mensaje_ok(content_type, content_length, cookie_counter):
     """ Esta función construye un mensaje de respuesta HTTP 200 OK
         Devuelve el mensaje de respuesta
     """
-    return ("HTTP/1.1 200 OK\n"
+    return ("HTTP/1.1 200 OKº"
             + "Date: " + datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT") + "\n"
             + "Server: organizacion3776.org\n" #TODO: Cambiar por el nombre del servidor
             + "Connection: keep-alive\n"
@@ -212,7 +213,8 @@ def process_post_request(cs, lines, webroot, headers):
         email = email.replace('%40', '@')
     
     #comprobamos si el email introducido es correcto y actuamos en consecuencia
-    if email == ALVARO_EMAIL or email == GERMAN_EMAIL:
+    ok = email == ALVARO_EMAIL or email == GERMAN_EMAIL
+    if ok:
         file = webroot + OK_FILE
     else: 
         file = webroot + FAIL_FILE
@@ -222,7 +224,12 @@ def process_post_request(cs, lines, webroot, headers):
 
     #obtenemos tamaño del fichero
     size = os.path.getsize(file)
-    response = crear_mensaje_ok("html", size, cookie_counter)
+
+    #preparamos la respuesta
+    if ok:
+        response = crear_mensaje_ok("html", size, cookie_counter)
+    else:
+        response = crear_mensaje_error(401, "Unauthorized")
 
     #Leemos el fichero (que no tiene más de 8 KB)
     with open(file, 'rb') as f:
