@@ -17,7 +17,7 @@ import logging      # Para imprimir logs
 
 BUFSIZE = 8192 # Tamaño máximo del buffer que se puede utilizar
 #XXYY = 3776
-TIMEOUT_CONNECTION = 23 # Timeout para la conexión persistente = 3+7+7+6 = 23
+TIMEOUT_CONNECTION = 3+7+7+6 # Timeout para la conexión persistente
 MAX_ACCESOS = 10# Número máximo de accesos a la página index.html
 HTTP_REGEX = re.compile(r'[^ ]{3,} [^ ]+ HTTP/[0-9].*\r\n(.+:.+\r\n)*\r\n(.*\n?)*')
 ALVARO_EMAIL = "a.navarromartinez1@um.es"
@@ -59,7 +59,7 @@ def crear_mensaje_error(code, msg):
     """ Esta función construye un mensaje de error HTTP
         Devuelve el mensaje de error
     """
-    response = ("HTTP/1.1 " + str(code) + " " + msg + "\n"
+    response = ("\nHTTP/1.1 " + str(code) + " " + msg + "\n"
         + "\n")
     response += ("<!DOCTYPE html>"
         + "<html>\n"
@@ -77,7 +77,8 @@ def crear_mensaje_ok(content_type, content_length, cookie_counter):
     """ Esta función construye un mensaje de respuesta HTTP 200 OK
         Devuelve el mensaje de respuesta
     """
-    return ("HTTP/1.1 200 OK\n"
+    return ("\n"
+            + "HTTP/1.1 200 OK\n"
             + "Date: " + datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT") + "\n"
             + "Server: organizacion3776.org\n" #TODO: Cambiar por el nombre del servidor
             + "Connection: keep-alive\n"
@@ -85,7 +86,7 @@ def crear_mensaje_ok(content_type, content_length, cookie_counter):
             + "Set-Cookie: cookie_counter_3776=" + str(cookie_counter) + "; "
             + "max-age=120\n"
             + "Content-Length: " + str(content_length) + "\n"
-            + "Content-Type: " + filetypes[content_type] + "\n\n").encode("utf-8")
+            + "Content-Type: " + content_type + "\n\n").encode("utf-8")
 
 def recibir_mensaje(cs):
     """ Esta función recibe datos a través del socket cs
@@ -133,7 +134,7 @@ def process_cookies(headers, url):
             if cookie_counter == MAX_ACCESOS:
                 return MAX_ACCESOS
             return cookie_counter+1
-    #Si no hay cabecera Cookie se devuelve 1 
+
     return cookie_counter+1
 
 
@@ -143,8 +144,7 @@ def is_method_http(method):
     """ Esta función comprueba si el método está incluido
         en la lista de métodos admitidos por HTTP.
     """
-    return method in ["GET", "POST"]
-    #return method in ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"]
+    return method in ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"]
 
 def process_get_request(cs, _url, webroot, headers):
     """ Esta función procesa una petición GET
@@ -302,12 +302,16 @@ def process_web_request(cs, webroot):
 
         #obtenemos las cabeceras
         headers = []
+        host = False
         i=1
         while lines[i]:
-            if lines[i].startswith("Host:"):
-                print("Detectada cabecera Host: ", lines[i].split(' ')[1])
+            if "Host:" in lines[i]:
+                host = True
             headers.append(lines[i])
             i=i+1
+        if not host:
+            enviar_mensaje(cs, crear_mensaje_error(400, "Bad Request"))
+            continue
 
         #obtenemos la linea de solicitud dividida
         req = lines[0].split(' ') # req = [method, url, vesion]
@@ -322,11 +326,8 @@ def process_web_request(cs, webroot):
             continue
 
         if req[0] == "GET":
-            error_code = process_get_request(cs, req[1], webroot, headers)
-            if error_code == -1:
+            if process_get_request(cs, req[1], webroot, headers) == -1:
                 return #volvemos y se cierra la conexión
-            elif error_code == 0:
-                continue
 
         if req[0] == "POST" and req[1] == "/accion_form.html":
             if process_post_request(cs, lines[i+1:len(lines)], webroot, headers) == -1:
@@ -405,7 +406,6 @@ def main():
 
                 #cerramos el socket
                 cerrar_conexion(client_socket)
-                print("Cerramos la conexion con el cliente ",address)
 
                 #salimos del proceso hijo
                 sys.exit(0)
