@@ -144,7 +144,6 @@ def is_method_http(method):
         en la lista de métodos admitidos por HTTP.
     """
     return method in ["GET", "POST"]
-    #return method in ["GET", "HEAD", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"]
 
 def process_get_request(cs, _url, webroot, headers):
     """ Esta función procesa una petición GET
@@ -173,7 +172,7 @@ def process_get_request(cs, _url, webroot, headers):
     #compobamos que el recurso existe
     if not os.path.isfile(path):
         enviar_mensaje(cs, crear_mensaje_error(404, "Not Found"))
-        return -1
+        return 0
 
     #obtener el tamaño del recurso en bytes
     size = os.path.getsize(path)
