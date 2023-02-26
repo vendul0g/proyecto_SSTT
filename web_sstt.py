@@ -19,7 +19,7 @@ BUFSIZE = 8192 # Tamaño máximo del buffer que se puede utilizar
 #XXYY = 3776
 TIMEOUT_CONNECTION = 23 # Timeout para la conexión persistente = 3+7+7+6 = 23
 MAX_ACCESOS = 10# Número máximo de accesos a la página index.html
-HTTP_REGEX = re.compile(r'[^ ]{3,} [^ ]+ HTTP/[0-9].*\r\n(.+:.+\r\n)*\r\n(.*\n?)*')
+HTTP_REGEX = re.compile(r'[^ ]{3,} [^ ]+ HTTP/[0-9].*\r\n(.+: .+\r\n)*\r\n(.*\n?)*')
 ALVARO_EMAIL = "a.navarromartinez1@um.es"
 GERMAN_EMAIL = "german.sanchez2@um.es"
 OK_FILE = "ok_file.html"
@@ -78,15 +78,15 @@ def crear_mensaje_ok(content_type, content_length, cookie_counter):
     """ Esta función construye un mensaje de respuesta HTTP 200 OK
         Devuelve el mensaje de respuesta
     """
-    return ("HTTP/1.1 200 OKº"
-            + "Date: " + datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT") + "\n"
-            + "Server: organizacion3776.org\n" #TODO: Cambiar por el nombre del servidor
-            + "Connection: keep-alive\n"
-            + "Keep-Alive: timeout=" + str(TIMEOUT_CONNECTION) + "\n"
+    return ("HTTP/1.1 200 OK\r\n"
+            + "Date: " + datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT") + "\r\n"
+            + "Server: serverSTTT3776.org\r\n" #TODO: Cambiar por el nombre del servidor
+            + "Connection: keep-alive\r\n"
+            + "Keep-Alive: timeout=" + str(TIMEOUT_CONNECTION) + "\r\n"
             + "Set-Cookie: cookie_counter_3776=" + str(cookie_counter) + "; "
-            + "max-age=120\n"
-            + "Content-Length: " + str(content_length) + "\n"
-            + "Content-Type: " + filetypes[content_type] + "\n\n").encode("utf-8")
+            + "max-age=120\r\n"
+            + "Content-Length: " + str(content_length) + "\r\n"
+            + "Content-Type: " + filetypes[content_type] + "\r\n\r\n").encode("utf-8")
 
 def recibir_mensaje(cs):
     """ Esta función recibe datos a través del socket cs
@@ -104,6 +104,7 @@ def recibir_mensaje(cs):
 def cerrar_conexion(cs):
     """ Esta función cierra una conexión activa.
     """
+    cs.shutdown(0)
     cs.close()
 
 
@@ -282,7 +283,6 @@ def process_web_request(cs, webroot):
 
         #comprobamos timeout excedido
         if not rsublist:
-            print("cierro: timeout excedido")
             return
 
         #Si hay datos en rsublist y timeout no excedido
@@ -291,8 +291,6 @@ def process_web_request(cs, webroot):
             if not data.endswith("\r\n\r\n") and not data.startswith("POST"):
                 continue
         else:
-            enviar_mensaje(cs, ("error detectado-167").encode('utf-8'))
-            print("error-167")
             continue
         rsublist = [] #limpiamos la lista
         aux = data
@@ -302,6 +300,7 @@ def process_web_request(cs, webroot):
         if not re.fullmatch(HTTP_REGEX, aux):
             enviar_mensaje(cs, crear_mensaje_error(400, "Bad Request"))
             continue
+        print("-- Petición bien formateada segundo HTTP 1.1")
         
         lines = aux.split('\r\n')
         print("\n")
@@ -311,7 +310,7 @@ def process_web_request(cs, webroot):
         i=1
         while lines[i]:
             if lines[i].startswith("Host:"):
-                print("Detectada cabecera Host: ", lines[i].split(' ')[1])
+                print("-- Detectada cabecera Host: ", lines[i].split(' ')[1])
             headers.append(lines[i])
             i=i+1
 
@@ -322,6 +321,7 @@ def process_web_request(cs, webroot):
         if req[2] != "HTTP/1.1": #comprobar version
             enviar_mensaje(cs, crear_mensaje_error(505, "Version Not Supported")) 
             continue
+        print("-- Version HTTP 1.1")
         
         if not is_method_http(req[0]): #comprobar si es un metodo valido
             enviar_mensaje(cs, crear_mensaje_error(405, "Method Not Allowed"))
@@ -390,14 +390,12 @@ def main():
             sys.exit(-1)
 
         #escuchamos conexiones entrantes
-        tcp_socket.listen(5) #recibe la conexión del cliente
+        tcp_socket.listen(5) #recibe la conexión del cliente Máximo 5
 
         #bucle infinito para mantener el servidor activo indefinidamente
         while True:
             #aceptamos la conexión
             (client_socket, address) = tcp_socket.accept()
-
-            print("Nueva conexion: ", address)
 
             #creamos un proceso hijo
             pid = os.fork()
@@ -411,7 +409,6 @@ def main():
 
                 #cerramos el socket
                 cerrar_conexion(client_socket)
-                print("Cerramos la conexion con el cliente ",address)
 
                 #salimos del proceso hijo
                 sys.exit(0)
