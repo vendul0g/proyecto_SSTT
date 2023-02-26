@@ -165,11 +165,13 @@ def process_get_request(cs, _url, webroot, headers):
     #procesamos las cookies
     cookie_counter = process_cookies(headers, url)
     if cookie_counter == MAX_ACCESOS:
+        print("Error 403: Forbidden")
         enviar_mensaje(cs, crear_mensaje_error(403, "Forbidden"))
         return -1
 
     #compobamos que el recurso existe
     if not os.path.isfile(path):
+        print("Error 404: Not Found")
         enviar_mensaje(cs, crear_mensaje_error(404, "Not Found"))
         return 0
 
@@ -227,6 +229,7 @@ def process_post_request(cs, lines, webroot, headers):
     if ok:
         response = crear_mensaje_ok("html", size, cookie_counter)
     else:
+        print("Error 401: Unauthorized")
         response = crear_mensaje_error(401, "Unauthorized")
 
     #Leemos el fichero (que no tiene más de 8 KB)
@@ -307,6 +310,7 @@ def process_web_request(cs, webroot):
 
         #analizamos la linea de solicitud
         if not re.fullmatch(HTTP_REGEX, aux):
+            print("Error 400: Bad Request")
             enviar_mensaje(cs, crear_mensaje_error(400, "Bad Request"))
             continue
         print("-- Peticion bien formateada segun HTTP 1.1")
@@ -328,11 +332,13 @@ def process_web_request(cs, webroot):
         print("req=",req)
         
         if req[2] != "HTTP/1.1": #comprobar version
+            print("Error 505: Version Not Supported")
             enviar_mensaje(cs, crear_mensaje_error(505, "Version Not Supported")) 
             continue
         print("-- Version HTTP 1.1")
         
         if not is_method_http(req[0]): #comprobar si es un metodo valido
+            print("Error 405: Method Not Allowed")
             enviar_mensaje(cs, crear_mensaje_error(405, "Method Not Allowed"))
             continue
 
