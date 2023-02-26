@@ -16,7 +16,7 @@ import logging      # Para imprimir logs
 
 
 BUFSIZE = 8192 # Tamaño máximo del buffer que se puede utilizar
-#XXYY = 3776
+#XXYY = 3776 -> Nombre de la organización: STTT3776.org
 TIMEOUT_CONNECTION = 23 # Timeout para la conexión persistente = 3+7+7+6 = 23
 MAX_ACCESOS = 10# Número máximo de accesos a la página index.html
 HTTP_REGEX = re.compile(r'[^ ]{3,} [^ ]+ HTTP/[0-9].*\r\n(.+: .+\r\n)*\r\n(.*\n?)*')
@@ -24,9 +24,6 @@ ALVARO_EMAIL = "a.navarromartinez1@um.es"
 GERMAN_EMAIL = "german.sanchez2@um.es"
 OK_FILE = "ok_file.html"
 FAIL_FILE = "failed_file.html"
-ERROR_FILE = {
-    403: "./server_webroot/403.html",
-}
 
 # Extensiones admitidas (extension, name in HTTP)
 filetypes = {"gif":"image/gif", "jpg":"image/jpg", "jpeg":"image/jpeg", "png":"image/png", "htm":"text/htm", 
@@ -61,6 +58,7 @@ def crear_mensaje_error(code, msg):
     """
     response = ("HTTP/1.1 " + str(code) + " " + msg + "\r\n"
         + "Content-Type: text/html; charset=UTF-8\r\n"
+        + "Connection: close\r\n"
         + "\r\n")
     response += ("<!DOCTYPE html>"
         + "<html>\r\n"
@@ -80,7 +78,7 @@ def crear_mensaje_ok(content_type, content_length, cookie_counter):
     """
     return ("HTTP/1.1 200 OK\r\n"
             + "Date: " + datetime.utcnow().strftime("%a, %d %b %Y %H:%M:%S GMT") + "\r\n"
-            + "Server: serverSTTT3776.org\r\n" #TODO: Cambiar por el nombre del servidor
+            + "Server: STTT3776.org\r\n"
             + "Connection: keep-alive\r\n"
             + "Keep-Alive: timeout=" + str(TIMEOUT_CONNECTION) + "\r\n"
             + "Set-Cookie: cookie_counter_3776=" + str(cookie_counter) + "; "
@@ -142,7 +140,7 @@ def process_cookies(headers, url):
 
 def is_method_http(method):
     """ Esta función comprueba si el método está incluido
-        en la lista de métodos admitidos por HTTP.
+        en la lista de métodos admitidos por nuestro servidor.
     """
     return method in ["GET", "POST"]
 
@@ -282,15 +280,27 @@ def process_web_request(cs, webroot):
 
         #comprobamos timeout excedido
         if not rsublist:
+            print("-- Timeout excedido. Cerrando conexion")
+            cerrar_conexion(cs)
             return
 
         #Si hay datos en rsublist y timeout no excedido
         if cs in rsublist:
-            data += recibir_mensaje(cs)
-            if not data.endswith("\r\n\r\n") and not data.startswith("POST"):
-                continue
-        else:
+            mensaje = recibir_mensaje(cs)
+            if not mensaje: #cliente ha cerrado la conexion
+                print("-- Cliente ha cerrado la conexion")
+                cerrar_conexion(cs)
+                return
+            data += mensaje
+
+        if data == "":
+            print("-- Error al recibir datos. Cerrando conexion")
+            cerrar_conexion(cs)
+            return
+
+        if not data.endswith("\r\n\r\n") and not data.startswith("POST"):
             continue
+
         rsublist = [] #limpiamos la lista
         aux = data
         data = "" #limpiamos la variable 
@@ -299,7 +309,7 @@ def process_web_request(cs, webroot):
         if not re.fullmatch(HTTP_REGEX, aux):
             enviar_mensaje(cs, crear_mensaje_error(400, "Bad Request"))
             continue
-        print("-- Petición bien formateada segundo HTTP 1.1")
+        print("-- Peticion bien formateada segun HTTP 1.1")
         
         lines = aux.split('\r\n')
         print("\n")
@@ -329,7 +339,8 @@ def process_web_request(cs, webroot):
         if req[0] == "GET":
             error_code = process_get_request(cs, req[1], webroot, headers)
             if error_code == -1:
-                return #volvemos y se cierra la conexión
+                cerrar_conexion(cs)
+                return 
             elif error_code == 0:
                 continue
 
@@ -401,13 +412,10 @@ def main():
             if pid == 0:
 
                 #si es el proceso hijo se cierra el socket del padre 
-                tcp_socket.close()
+                cerrar_conexion(tcp_socket)
 
                 #procesamos las peticiones 
                 process_web_request(client_socket, args.webroot)
-
-                #cerramos el socket
-                cerrar_conexion(client_socket)
 
                 #salimos del proceso hijo
                 sys.exit(0)
