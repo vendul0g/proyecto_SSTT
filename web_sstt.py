@@ -104,7 +104,6 @@ def recibir_mensaje(cs):
 def cerrar_conexion(cs):
     """ Esta función cierra una conexión activa.
     """
-    cs.shutdown(0)
     cs.close()
 
 
