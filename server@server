@@ -61,13 +61,11 @@ def crear_cabeceras_HTTP(content_type, content_length, cookie_counter):
         + "Keep-Alive: timeout=" + str(TIMEOUT_CONNECTION) + "\r\n")
     
     if cookie_counter != 0:
-        response += ("Set-Cookie: cookie_counter_3776=" + str(cookie_counter) + "; "
-        + "max-age=120\r\n")
+        response += "Set-Cookie: cookie_counter_3776=" + str(cookie_counter) + "; "
+        + "max-age=120\r\n"
                 
     response += ("Content-Length: " + str(content_length) + "\r\n"
         + "Content-Type: " + filetypes[content_type] + "\r\n")
-    
-    return response
 
 def crear_mensaje_error(code, msg, cookie_counter):
     """ Esta función construye un mensaje de error HTTP
@@ -320,7 +318,6 @@ def process_web_request(cs, webroot):
         aux = data
         data = "" #limpiamos la variable 
 
-        print("\n")
         #analizamos la linea de solicitud
         if not re.fullmatch(HTTP_REGEX, aux):
             print("Error 400: Bad Request\n\n")
@@ -329,6 +326,7 @@ def process_web_request(cs, webroot):
         print("-- Peticion bien formateada segun HTTP 1.1")
         
         lines = aux.split('\r\n')
+        print("\n")
 
         #obtenemos las cabeceras
         headers = []
@@ -366,7 +364,7 @@ def process_web_request(cs, webroot):
             if process_post_request(cs, lines[i+1:len(lines)], webroot, headers) == -1:
                 continue
 
-        print("^^^Peticion correcta^^^\n\n")
+        print("Peticion correcta\n\n")
 
 
 
