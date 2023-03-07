@@ -47,8 +47,10 @@ def enviar_mensaje(cs, data):
 
         #enviamos los trozos
         for trozo in trozos:
+            print("enviando mensaje = ", len(trozo), "(longitud del mensaje)")
             cs.send(trozo)
     else:
+        print("enviando mensaje = ", len(data), "(longitud del mensaje)")
         cs.send(data)
 
 def crear_cabeceras_HTTP(content_type, content_length, cookie_counter):
@@ -69,7 +71,7 @@ def crear_cabeceras_HTTP(content_type, content_length, cookie_counter):
     
     return response
 
-def crear_mensaje_error(code, msg, cookie_counter, mode, file):
+def crear_mensaje_error(code, msg, cookie_counter):
     """ Esta función construye un mensaje de error HTTP
         Devuelve el mensaje de error
     """
@@ -83,16 +85,21 @@ def crear_mensaje_error(code, msg, cookie_counter, mode, file):
         +   "\t</body>\r\n"
         + "</html>\r\n")
     
-    if mode == 0:
-        response = ("HTTP/1.1 " + str(code) + " " + msg + "\r\n"
-            + crear_cabeceras_HTTP("html", len(FAIL_FILE), cookie_counter)
-            + "\r\n" 
-            + html_error)
-    elif mode == 1:
-        response = ("HTTP/1.1 " + str(code) + " " + msg + "\r\n"
-            + crear_cabeceras_HTTP("html", os.path.getsize(file), cookie_counter)
-            + "\r\n")
+    response = ("HTTP/1.1 " + str(code) + " " + msg + "\r\n"
+        + crear_cabeceras_HTTP("html", len(html_error), cookie_counter)
+        + "\r\n" 
+        + html_error)
     
+    return response.encode("utf-8")
+    
+def crear_mensaje_failed_email(cookie_counter, file):
+    """ Esta función construye un mensaje de error HTTP 401
+        Devuelve el mensaje de error
+    """
+    response = ("HTTP/1.1 401 Unauthorized\r\n"
+        + crear_cabeceras_HTTP("html", os.path.getsize(file), cookie_counter)
+        + "\r\n")
+
     return response.encode("utf-8")
 
 def crear_mensaje_ok(content_type, content_length, cookie_counter):
@@ -183,13 +190,13 @@ def process_get_request(cs, _url, webroot, headers):
     cookie_counter = process_cookies(headers, url)
     if cookie_counter == MAX_ACCESOS:
         print("Error 403: Forbidden\n\n")
-        enviar_mensaje(cs, crear_mensaje_error(403, "Forbidden", cookie_counter, 0, ""))
+        enviar_mensaje(cs, crear_mensaje_error(403, "Forbidden", cookie_counter))
         return -1
 
     #compobamos que el recurso existe
     if not os.path.isfile(path):
         print("Error 404: Not Found\n\n")
-        enviar_mensaje(cs, crear_mensaje_error(404, "Not Found", cookie_counter, 0, ""))
+        enviar_mensaje(cs, crear_mensaje_error(404, "Not Found", cookie_counter))
         return 0
 
     #obtener el tamaño del recurso en bytes
@@ -247,14 +254,13 @@ def process_post_request(cs, lines, webroot, headers):
         response = crear_mensaje_ok("html", size, cookie_counter)
     else:
         print("Error 401: Unauthorized\n\n")
-        response = crear_mensaje_error(401, "Unauthorized", cookie_counter, 1, file)
+        response = crear_mensaje_failed_email(cookie_counter, file)
 
     #Leemos el fichero (que no tiene más de 8 KB)
     with open(file, 'rb') as f:
         response += f.read(BUFSIZE)
 
     #enviamos el mensaje
-    print("---\n",response.decode('utf-8'),"\n---")
     enviar_mensaje(cs, response)
 
 def process_web_request(cs, webroot):
@@ -308,10 +314,6 @@ def process_web_request(cs, webroot):
         #Si hay datos en rsublist y timeout no excedido
         if cs in rsublist:
             mensaje = recibir_mensaje(cs)
-            if not mensaje: #cliente ha cerrado la conexion
-                print("-- Cliente ha cerrado la conexion")
-                cerrar_conexion(cs)
-                return
             data += mensaje
 
         if data == "":
@@ -330,7 +332,7 @@ def process_web_request(cs, webroot):
         #analizamos la linea de solicitud
         if not re.fullmatch(HTTP_REGEX, aux):
             print("Error 400: Bad Request\n\n")
-            enviar_mensaje(cs, crear_mensaje_error(400, "Bad Request", 0, 0, ""))
+            enviar_mensaje(cs, crear_mensaje_error(400, "Bad Request", 0))
             continue
         print("-- Peticion bien formateada segun HTTP 1.1")
         
@@ -346,18 +348,18 @@ def process_web_request(cs, webroot):
             i=i+1
 
         #obtenemos la linea de solicitud dividida
-        req = lines[0].split(' ') # req = [method, url, vesion]
+        req = lines[0].split(' ') # req = [method, url, version]
         print("req=",req)
         
         if req[2] != "HTTP/1.1": #comprobar version
             print("Error 505: Version Not Supported\n\n")
-            enviar_mensaje(cs, crear_mensaje_error(505, "Version Not Supported", 0, 0, "")) 
+            enviar_mensaje(cs, crear_mensaje_error(505, "Version Not Supported", 0)) 
             continue
         print("-- Version HTTP 1.1")
         
         if not is_method_http(req[0]): #comprobar si es un metodo valido
             print("Error 405: Method Not Allowed\n\n")
-            enviar_mensaje(cs, crear_mensaje_error(405, "Method Not Allowed", 0, 0, ""))
+            enviar_mensaje(cs, crear_mensaje_error(405, "Method Not Allowed", 0))
             continue
 
         if req[0] == "GET":
@@ -371,9 +373,6 @@ def process_web_request(cs, webroot):
         if req[0] == "POST" and req[1] == "/accion_form.html":
             if process_post_request(cs, lines[i+1:len(lines)], webroot, headers) == -1:
                 continue
-
-        print("^^^Peticion correcta^^^\n\n")
-
 
 
 def main():
