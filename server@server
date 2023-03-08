@@ -19,7 +19,7 @@ BUFSIZE = 8192 # Tamaño máximo del buffer que se puede utilizar
 #XXYY = 3776 -> Nombre de la organización: STTT3776.org
 TIMEOUT_CONNECTION = 23 # Timeout para la conexión persistente = 3+7+7+6 = 23
 MAX_ACCESOS = 10# Número máximo de accesos a la página index.html
-MAX_PETICIONES = 25 # Número máximo de peticiones por conexión
+MAX_PETICIONES = 100 # Número máximo de peticiones por conexión
 HTTP_REGEX = re.compile(r'[^ ]{3,} [^ ]+ HTTP/[0-9].*\r\n(.+: .+\r\n)*\r\n(.*\n?)*')
 ALVARO_EMAIL = "a.navarromartinez1@um.es"
 GERMAN_EMAIL = "german.sanchez2@um.es"
@@ -308,7 +308,7 @@ def process_web_request(cs, webroot):
     while True:
         #comprobamos si se ha excedido el numero de peticiones
         if contador_peticiones >= MAX_PETICIONES:
-            print("Numero maximo de peticiones excedido")
+            print("Numero máximo de peticiones excedido")
             cerrar_conexion(cs)
             return
         contador_peticiones += 1
